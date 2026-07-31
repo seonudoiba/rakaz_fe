@@ -11,6 +11,9 @@ export default defineConfig({
     },
   },
   server: {
+    allowedHosts: [
+      'antics-cornfield-coconut.ngrok-free.dev'  // ✅ No protocol
+    ],
     port: 3000,
     proxy: {
       '/api': {
