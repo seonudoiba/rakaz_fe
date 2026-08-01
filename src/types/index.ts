@@ -1,11 +1,11 @@
 // ============= ENUMS =============
+// ============= USER ROLE ENUM =============
 export enum UserRole {
   SUPER_ADMIN = 'SUPER_ADMIN',
   REGIONAL_MANAGER = 'REGIONAL_MANAGER',
-  SUPERVISOR = 'SUPERVISOR',  // Changed from SUPERVISOR
+  SUPERVISOR = 'SUPERVISOR',
   ATTENDANT = 'ATTENDANT',
   ACCOUNTANT = 'ACCOUNTANT',
-  // DEPOT_MANAGER removed
 }
 
 export enum PaymentMethod {
@@ -88,17 +88,17 @@ export interface User {
   firstName: string;
   lastName: string;
   phone: string;
+  role: UserRole;
   stationId?: string;
   regionId?: string;
   isActive: boolean;
   lastLoginAt?: string;
-  profileImage?: string;
-  name: string;
-  role: UserRole;
-  permissions?: string[]; // Optional: for granular permissions
-  department?: string;
   createdAt: string;
   updatedAt: string;
+  profileImage?: string;
+  name: string;
+  permissions?: string[]; 
+  department?: string;
   station?: Station;
   region?: Region;
   settings?: Settings;

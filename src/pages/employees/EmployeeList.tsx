@@ -88,6 +88,13 @@ const EmployeeList: React.FC = () => {
             <Plus size={18} />
             Add Employee
           </button>
+             <button
+            onClick={() => navigate('/users')}
+            className="flex items-center gap-2 px-4 py-2 bg-petroleum-seagreen text-petroleum-dark rounded-lg hover:bg-petroleum-seagreen/90 transition-colors font-medium"
+          >
+            {/* <Plus size={18} /> */}
+            Users
+          </button>
           <button
             onClick={fetchEmployees}
             className="px-4 py-2 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"

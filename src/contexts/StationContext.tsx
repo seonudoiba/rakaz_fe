@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo, useRef } from 'react';
 import { useAuth } from './AuthContext';
 import { stationsApi } from '../api/stations';
 import { UserRole } from '../types';
@@ -24,68 +24,92 @@ export const StationProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [stations, setStations] = useState<any[]>([]);
   const [selectedStationId, setSelectedStationId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  
+  // Use refs to prevent multiple fetches
+  const hasFetched = useRef<boolean>(false);
+  const isFetching = useRef<boolean>(false);
+  const fetchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const isSuperAdmin = user?.role === UserRole.SUPER_ADMIN;
   const isRegionalManager = user?.role === UserRole.REGIONAL_MANAGER;
   const isSupervisor = user?.role === UserRole.SUPERVISOR;
-  
-  // Empty string means "All Stations" for Super Admin
   const isAllStations = selectedStationId === '' && isSuperAdmin;
 
   const fetchStations = async () => {
+    // Prevent multiple simultaneous fetches
+    if (isFetching.current) {
+      console.log('⏳ [StationProvider] Fetch already in progress, skipping...');
+      return;
+    }
+
     try {
+      isFetching.current = true;
       setLoading(true);
       
+      console.log('📡 [StationProvider] Fetching stations...');
       let stationData = await stationsApi.getAll();
       
       // Filter stations based on role
       if (isRegionalManager && user?.regionId) {
-        // Regional Manager only sees stations in their region
         stationData = stationData.filter(s => s.regionId === user.regionId);
       } else if (isSupervisor && user?.stationId) {
-        // Supervisor only sees their own station
         stationData = stationData.filter(s => s.id === user.stationId);
       }
-      // Super Admin sees all stations
       
       setStations(stationData);
       
-      // Auto-select station based on role
-      if (stationData.length > 0) {
+      // Only set selected station if not already set
+      if (stationData.length > 0 && selectedStationId === null) {
+        let newSelectedId: string | null = null;
+        
         if (isSuperAdmin) {
-          // Super Admin defaults to "All Stations"
-          setSelectedStationId('');  // Empty string = All Stations
+          newSelectedId = '';
         } else if (isRegionalManager) {
-          // Regional Manager selects the first station in their region
-          setSelectedStationId(stationData[0].id);
+          newSelectedId = stationData[0].id;
         } else if (isSupervisor && user?.stationId) {
-          // Supervisor selects their assigned station
-          setSelectedStationId(user.stationId);
+          newSelectedId = user.stationId;
         } else if (user?.stationId) {
-          // Other roles with station assigned
-          setSelectedStationId(user.stationId);
+          newSelectedId = user.stationId;
         } else {
-          // Fallback: select first station
-          setSelectedStationId(stationData[0].id);
+          newSelectedId = stationData[0].id;
         }
-      } else {
+        
+        setSelectedStationId(newSelectedId);
+      } else if (stationData.length === 0) {
         setSelectedStationId(null);
       }
+      
+      hasFetched.current = true;
     } catch (error) {
       console.error('Error fetching stations:', error);
       setSelectedStationId(null);
     } finally {
       setLoading(false);
+      isFetching.current = false;
     }
   };
 
   useEffect(() => {
-    if (user) {
-      fetchStations();
-    } else {
-      // If no user, still set loading to false
-      setLoading(false);
+    // Only fetch once when user is available and not already fetched
+    if (user && !hasFetched.current && !isFetching.current) {
+      // Add a small delay to prevent race conditions
+      if (fetchTimeoutRef.current) {
+        clearTimeout(fetchTimeoutRef.current);
+      }
+      
+      fetchTimeoutRef.current = setTimeout(() => {
+        fetchStations();
+        fetchTimeoutRef.current = null;
+      }, 100);
     }
+
+    // Cleanup timeout on unmount
+    return () => {
+      if (fetchTimeoutRef.current) {
+        clearTimeout(fetchTimeoutRef.current);
+        fetchTimeoutRef.current = null;
+      }
+    };
   }, [user]);
 
   const getFilteredStations = () => {
@@ -99,7 +123,6 @@ export const StationProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return stations;
   };
 
-  // Memoize the context value to prevent unnecessary re-renders
   const value = useMemo(() => ({
     stations,
     selectedStationId,

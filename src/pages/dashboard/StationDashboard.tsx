@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useStation } from '../../contexts/StationContext';
 import { stationsApi } from '../../api/stations';
@@ -42,7 +42,7 @@ type TimeRangeType = 'today' | 'week' | 'month' | 'quarter' | 'year' | 'lastYear
 
 const StationDashboard: React.FC = () => {
   const { user } = useAuth();
-  const { selectedStationId, isSuperAdmin, isAllStations, stations } = useStation();
+  const { selectedStationId, isSuperAdmin, isAllStations, stations, loading: stationLoading } = useStation();
   const [loading, setLoading] = useState(true);
   const [dashboardData, setDashboardData] = useState<any>(null);
   const [timeRange, setTimeRange] = useState<TimeRangeType>('all');
@@ -54,11 +54,13 @@ const StationDashboard: React.FC = () => {
     new Date().toISOString().split('T')[0]
   );
   const customDateRef = useRef<HTMLDivElement>(null);
+  
+  // Use refs to track fetch state - FIXED: Use number | undefined instead of NodeJS.Timeout
+  const isFetching = useRef<boolean>(false);
+  const fetchTimeoutRef = useRef<number | undefined>(undefined);
+  const lastFetchParams = useRef<string>('');
 
-  useEffect(() => {
-    fetchDashboardData();
-  }, [timeRange, selectedStationId, customStartDate, customEndDate]);
-
+  // Click outside handler for custom date picker
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (customDateRef.current && !customDateRef.current.contains(event.target as Node)) {
@@ -69,7 +71,7 @@ const StationDashboard: React.FC = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const getDateRange = () => {
+  const getDateRange = useCallback(() => {
     const now = new Date();
     let startDate = new Date();
     let endDate = new Date();
@@ -106,7 +108,7 @@ const StationDashboard: React.FC = () => {
     }
 
     return { startDate, endDate };
-  };
+  }, [timeRange, customStartDate, customEndDate]);
 
   const getTimeRangeLabel = () => {
     switch (timeRange) {
@@ -122,111 +124,159 @@ const StationDashboard: React.FC = () => {
     }
   };
 
-  const fetchDashboardData = async () => {
-  try {
-    setLoading(true);
-
-    let data;
-    const { startDate, endDate } = getDateRange();
-    
-    if (isAllStations && isSuperAdmin) {
-      // Fetch data from all stations and aggregate
-      const allStations = await stationsApi.getAll();
-      
-      // Get sales and expenses for all stations
-      const allSalesPromises = allStations.map(station =>
-        salesApi.getStationSales(station.id, startDate.toISOString(), endDate.toISOString())
-      );
-      const allSalesData = await Promise.all(allSalesPromises);
-      const allTransactions = allSalesData.flat();
-      
-      // Get expenses
-      const expensePromises = allStations.map(station =>
-        expensesApi.getStationExpenses(station.id, {
-          startDate: startDate.toISOString(),
-          endDate: endDate.toISOString(),
-        })
-      );
-      const allExpensesData = await Promise.all(expensePromises);
-      const allExpenses = allExpensesData.flat();
-      
-      // Get pumps (from first station or all)
-      let allPumps = [];
-      try {
-        const pumpsPromises = allStations.map(station =>
-          pumpsApi.getStationPumps(station.id)
-        );
-        const pumpsData = await Promise.all(pumpsPromises);
-        allPumps = pumpsData.flat();
-      } catch (error) {
-        console.warn('Error fetching pumps:', error);
-      }
-      
-      // Get tanks - handle gracefully
-      let allTanks = [];
-      try {
-        const tankPromises = allStations.map(station =>
-          inventoryApi.getTankMonitoring(station.id)
-        );
-        const tanksData = await Promise.all(tankPromises);
-        allTanks = tanksData.flatMap(t => t.tanks || []);
-      } catch (error) {
-        console.warn('Error fetching tanks:', error);
-      }
-      
-      data = {
-        station: { name: 'All Stations', code: 'ALL' },
-        sales: {
-          totalSales: allTransactions.reduce((sum, s) => sum + (s.totalAmount || 0), 0),
-          totalVolume: allTransactions.reduce((sum, s) => sum + (s.quantity || 0), 0),
-          transactionCount: allTransactions.length,
-          transactions: allTransactions
-        },
-        pumps: allPumps,
-        expenses: allExpenses,
-        inventory: {
-          tanks: allTanks
-        }
-      };
-    } else if (selectedStationId) {
-      // Fetch data for specific station
-      const [stationData, salesData, pumpsData, expensesData, inventoryData] = await Promise.all([
-        stationsApi.getDashboard(selectedStationId),
-        salesApi.getStationSales(selectedStationId, startDate.toISOString(), endDate.toISOString()),
-        pumpsApi.getStationPumps(selectedStationId),
-        expensesApi.getStationExpenses(selectedStationId, {
-          startDate: startDate.toISOString(),
-          endDate: endDate.toISOString(),
-        }),
-        // Handle tanks gracefully - if fails, return empty
-        inventoryApi.getTankMonitoring(selectedStationId).catch(() => ({ tanks: [] })),
-      ]);
-
-      data = {
-        station: stationData,
-        sales: {
-          totalSales: salesData.reduce((sum, s) => sum + s.totalAmount, 0),
-          totalVolume: salesData.reduce((sum, s) => sum + s.quantity, 0),
-          transactionCount: salesData.length,
-          transactions: salesData
-        },
-        pumps: pumpsData,
-        expenses: expensesData,
-        inventory: inventoryData || { tanks: [] },
-      };
-    } else {
-      data = null;
+  const fetchDashboardData = useCallback(async () => {
+    // Prevent multiple simultaneous fetches
+    if (isFetching.current) {
+      console.log('⏳ [StationDashboard] Fetch already in progress, skipping...');
+      return;
     }
 
-    setDashboardData(data);
-  } catch (error) {
-    console.error('Error fetching dashboard data:', error);
-    toast.error('Failed to load dashboard data');
-  } finally {
-    setLoading(false);
-  }
-};
-  
+    // Prevent fetching if no station is selected
+    if (!selectedStationId && !isAllStations) {
+      console.log('ℹ️ [StationDashboard] No station selected, skipping fetch');
+      setLoading(false);
+      return;
+    }
+
+    // Create a unique key for this request to prevent duplicates
+    const requestKey = `${selectedStationId}-${timeRange}-${customStartDate}-${customEndDate}`;
+    if (requestKey === lastFetchParams.current) {
+      console.log('🔄 [StationDashboard] Same request, skipping duplicate...');
+      return;
+    }
+    lastFetchParams.current = requestKey;
+
+    try {
+      isFetching.current = true;
+      setLoading(true);
+
+      const { startDate, endDate } = getDateRange();
+      
+      let data;
+      
+      if (isAllStations && isSuperAdmin) {
+        // Fetch data from all stations
+        const allStations = await stationsApi.getAll();
+        
+        const allSalesPromises = allStations.map(station =>
+          salesApi.getStationSales(station.id, startDate.toISOString(), endDate.toISOString())
+        );
+        const allSalesData = await Promise.all(allSalesPromises);
+        const allTransactions = allSalesData.flat();
+        
+        const expensePromises = allStations.map(station =>
+          expensesApi.getStationExpenses(station.id, {
+            startDate: startDate.toISOString(),
+            endDate: endDate.toISOString(),
+          })
+        );
+        const allExpensesData = await Promise.all(expensePromises);
+        const allExpenses = allExpensesData.flat();
+        
+        let allPumps = [];
+        try {
+          const pumpsPromises = allStations.map(station =>
+            pumpsApi.getStationPumps(station.id)
+          );
+          const pumpsData = await Promise.all(pumpsPromises);
+          allPumps = pumpsData.flat();
+        } catch (error) {
+          console.warn('Error fetching pumps:', error);
+        }
+        
+        let allTanks = [];
+        try {
+          const tankPromises = allStations.map(station =>
+            inventoryApi.getTankMonitoring(station.id)
+          );
+          const tanksData = await Promise.all(tankPromises);
+          allTanks = tanksData.flatMap((t: any) => t.tanks || []);
+        } catch (error) {
+          console.warn('Error fetching tanks:', error);
+        }
+        
+        data = {
+          station: { name: 'All Stations', code: 'ALL' },
+          sales: {
+            totalSales: allTransactions.reduce((sum: number, s: any) => sum + (s.totalAmount || 0), 0),
+            totalVolume: allTransactions.reduce((sum: number, s: any) => sum + (s.quantity || 0), 0),
+            transactionCount: allTransactions.length,
+            transactions: allTransactions
+          },
+          pumps: allPumps,
+          expenses: allExpenses,
+          inventory: {
+            tanks: allTanks
+          }
+        };
+      } else if (selectedStationId) {
+        // Fetch data for specific station
+        const [stationData, salesData, pumpsData, expensesData, inventoryData] = await Promise.all([
+          stationsApi.getOne(selectedStationId),
+          salesApi.getStationSales(selectedStationId, startDate.toISOString(), endDate.toISOString()),
+          pumpsApi.getStationPumps(selectedStationId),
+          expensesApi.getStationExpenses(selectedStationId, {
+            startDate: startDate.toISOString(),
+            endDate: endDate.toISOString(),
+          }),
+          inventoryApi.getTankMonitoring(selectedStationId).catch(() => ({ tanks: [] })),
+        ]);
+
+        data = {
+          station: stationData,
+          sales: {
+            totalSales: salesData.reduce((sum: number, s: any) => sum + (s.totalAmount || 0), 0),
+            totalVolume: salesData.reduce((sum: number, s: any) => sum + (s.quantity || 0), 0),
+            transactionCount: salesData.length,
+            transactions: salesData
+          },
+          pumps: pumpsData,
+          expenses: expensesData,
+          inventory: inventoryData || { tanks: [] },
+        };
+      } else {
+        data = null;
+      }
+
+      setDashboardData(data);
+    } catch (error) {
+      console.error('Error fetching dashboard data:', error);
+      // Only show toast for errors, not for rate limiting
+      if (error instanceof Error && !error.message.includes('Too many requests')) {
+        toast.error('Failed to load dashboard data');
+      }
+    } finally {
+      setLoading(false);
+      isFetching.current = false;
+    }
+  }, [selectedStationId, timeRange, customStartDate, customEndDate, isAllStations, isSuperAdmin, getDateRange]);
+
+  // Use a debounced fetch
+  useEffect(() => {
+    // Clear any pending timeout
+    if (fetchTimeoutRef.current) {
+      clearTimeout(fetchTimeoutRef.current);
+      fetchTimeoutRef.current = undefined;
+    }
+
+    // Don't fetch while stations are loading
+    if (stationLoading) {
+      return;
+    }
+
+    // Add a delay to prevent rapid successive calls
+    fetchTimeoutRef.current = window.setTimeout(() => {
+      fetchDashboardData();
+      fetchTimeoutRef.current = undefined;
+    }, 500);
+
+    return () => {
+      if (fetchTimeoutRef.current) {
+        clearTimeout(fetchTimeoutRef.current);
+        fetchTimeoutRef.current = undefined;
+      }
+    };
+  }, [fetchDashboardData, stationLoading]);
 
   const getStationDisplay = () => {
     if (isAllStations && isSuperAdmin) return 'All Stations';

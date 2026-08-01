@@ -2,11 +2,15 @@ import React, { Suspense, lazy } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { useAuth } from "./contexts/AuthContext";
 import { useStation } from "./contexts/StationContext";
+import { UserRole } from "./types";
 
 // Lazy load components
 const Layout = lazy(() => import("./components/layout/Layout"));
 const Login = lazy(() => import("./pages/auth/Login"));
 const ForgotPassword = lazy(() => import("./pages/auth/ForgotPassword"));
+
+// User Management
+const UserManagement = lazy(() => import("./pages/auth/UserManagement"));
 
 // Dashboard
 const ExecutiveDashboard = lazy(
@@ -140,21 +144,18 @@ const AppRoutes: React.FC = () => {
     }
 
     // Regional Manager - show regional view
-    if (user?.role === "REGIONAL_MANAGER") {
+    if (user?.role === UserRole.REGIONAL_MANAGER) {
       return <RegionalDashboard />;
     }
 
     // Supervisor - show station view
-    if (user?.role === "SUPERVISOR") {
+    if (user?.role === UserRole.SUPERVISOR) {
       return <StationDashboard />;
     }
 
     // Default fallback
     return <ExecutiveDashboard />;
   };
-
-  // Helper to check if user can access all stations
-  const canAccessAllStations = isSuperAdmin;
 
   return (
     <BrowserRouter>
@@ -183,7 +184,12 @@ const AppRoutes: React.FC = () => {
               <Route path="management" element={<StationManagement />} />
             </Route>
 
-            {/* Sales - can access all or specific station */}
+            {/* Users */}
+            <Route path="users">
+              <Route index element={<UserManagement />} />
+            </Route>
+
+            {/* Sales */}
             <Route path="sales">
               <Route index element={<SalesManagement />} />
               <Route path="daily-report" element={<DailyReport />} />
