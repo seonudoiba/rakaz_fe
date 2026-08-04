@@ -5,7 +5,7 @@ import { usersApi } from '../../api/users';
 import { 
   Plus, Search, Filter, ChevronRight, 
   MapPin, Users, Fuel, Edit, Trash2,
-  Eye
+  Eye, Building2, Camera
 } from 'lucide-react';
 import { Station } from '../../types';
 import { formatCurrency } from '../../utils/formatters';
@@ -107,17 +107,34 @@ const StationList: React.FC = () => {
             key={station.id}
             className="bg-white rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-shadow overflow-hidden"
           >
+            {/* Station Image */}
+            <div className="relative h-48 bg-gray-100">
+              {station.imageUrl ? (
+                <img 
+                  src={station.imageUrl} 
+                  alt={station.name}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-petroleum-seagreen/10 to-petroleum-seagreen/5">
+                  <Building2 size={48} className="text-petroleum-seagreen/40" />
+                </div>
+              )}
+              <div className="absolute top-2 right-2">
+                <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                  station.isActive ? 'bg-green-500 text-white' : 'bg-gray-500 text-white'
+                }`}>
+                  {station.isActive ? 'Active' : 'Inactive'}
+                </span>
+              </div>
+            </div>
+
             <div className="p-6">
               <div className="flex items-start justify-between">
                 <div>
                   <h3 className="text-lg font-semibold text-gray-900">{station.name}</h3>
                   <p className="text-sm text-gray-500">{station.code}</p>
                 </div>
-                <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                  station.isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'
-                }`}>
-                  {station.isActive ? 'Active' : 'Inactive'}
-                </span>
               </div>
 
               <div className="mt-4 space-y-2">

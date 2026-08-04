@@ -142,6 +142,7 @@ export interface Station {
   longitude?: number;
   phone?: string;
   email?: string;
+  imageUrl?: string;
   openingTime?: string;
   closingTime?: string;
   createdAt: string;

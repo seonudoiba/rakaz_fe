@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { useAuth } from "./contexts/AuthContext";
 import { useStation } from "./contexts/StationContext";
 import { UserRole } from "./types";
+import TankManagement from "./pages/inventory/TankManagement";
 
 // Lazy load components
 const Layout = lazy(() => import("./components/layout/Layout"));
@@ -122,13 +123,13 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({
 
 const AppRoutes: React.FC = () => {
   const { user } = useAuth();
-  const { 
-    hasStation, 
-    isSuperAdmin, 
-    stations, 
+  const {
+    hasStation,
+    isSuperAdmin,
+    stations,
     setSelectedStationId,
     selectedStationId,
-    isAllStations 
+    isAllStations,
   } = useStation();
 
   // Determine which dashboard to show based on role and station selection
@@ -137,7 +138,7 @@ const AppRoutes: React.FC = () => {
     if (isSuperAdmin && (isAllStations || !selectedStationId)) {
       return <ExecutiveDashboard />;
     }
-    
+
     // Super Admin with a specific station selected
     if (isSuperAdmin && selectedStationId) {
       return <StationDashboard />;
@@ -220,10 +221,10 @@ const AppRoutes: React.FC = () => {
             {/* Inventory */}
             <Route path="inventory">
               <Route index element={<TankMonitoring />} />
+              <Route path="tanks" element={<TankManagement />} />
               <Route path="audit" element={<InventoryAudit />} />
               <Route path="movement" element={<ProductMovement />} />
             </Route>
-
             {/* Logistics */}
             <Route path="logistics">
               <Route index element={<LogisticsManagement />} />

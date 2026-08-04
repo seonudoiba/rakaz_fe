@@ -8,7 +8,7 @@ import { expensesApi } from '../../api/expenses';
 import {
   ArrowLeft, MapPin, Phone, Mail, Clock, Users, Fuel,
   Edit, Download, RefreshCw, Truck, Package, DollarSign,
-  Calendar, AlertTriangle, CheckCircle, BarChart3
+  Calendar, AlertTriangle, CheckCircle, BarChart3, Building2
 } from 'lucide-react';
 import { TankCard } from '../../components/cards/TankCard';
 import { StatCard } from '../../components/cards/StatCard';
@@ -57,10 +57,19 @@ const StationDetails: React.FC = () => {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-4">
           <button onClick={() => navigate('/stations')} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
             <ArrowLeft size={20} />
           </button>
+          <div className="w-16 h-16 rounded-lg overflow-hidden bg-gray-100 shrink-0 border border-gray-200">
+            {station.imageUrl ? (
+              <img src={station.imageUrl} alt={station.name} className="w-full h-full object-cover" />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center bg-petroleum-seagreen/10">
+                <Building2 size={28} className="text-petroleum-seagreen" />
+              </div>
+            )}
+          </div>
           <div>
             <h1 className="text-2xl font-bold text-gray-900">{station.name}</h1>
             <p className="text-gray-500">{station.code} • {station.city}, {station.state}</p>
